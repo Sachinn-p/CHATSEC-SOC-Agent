@@ -125,7 +125,7 @@ class ChatInterface:
             if st.sidebar.button(f"Delete {selected_session}", key=f"delete_{selected_session}"):
                 self.chat_manager.delete_chat_session(selected_session)
                 st.sidebar.success("Session deleted!")
-                st.experimental_rerun()
+                st.rerun()
             
             return selected_session
         
@@ -174,14 +174,14 @@ class ChatInterface:
                 new_session = self.chat_manager.create_new_session()
                 st.session_state.current_session = new_session
                 st.sidebar.success(f"Created {new_session}")
-                st.experimental_rerun()
+                st.rerun()
         
         with col2:
             if st.button("Clear Current", key="clear_current"):
                 current_session = getattr(st.session_state, 'current_session', 'default')
                 self.chat_manager.delete_chat_session(current_session)
                 st.sidebar.success("Session cleared!")
-                st.experimental_rerun()
+                st.rerun()
     
     def render_chat_tab(self, agent_runner_callback=None):
         """Render complete chat tab interface"""
@@ -226,7 +226,7 @@ class ChatInterface:
                         self.display_assistant_response(response, current_session)
                         
                         # Rerun to show the new messages
-                        st.experimental_rerun()
+                        st.rerun()
                 
                 except Exception as e:
                     error_msg = f"❌ Error processing your request: {str(e)}"

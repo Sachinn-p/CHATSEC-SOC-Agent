@@ -14,6 +14,7 @@ class DatabaseManager:
     
     def __init__(self, db_file: str = None):
         self.db_file = db_file or Config.DATABASE_FILE
+        self._initialized = False
     
     @contextmanager
     def get_connection(self):
@@ -23,6 +24,12 @@ class DatabaseManager:
             yield conn
         finally:
             conn.close()
+    
+    def _ensure_initialized(self):
+        """Ensure database is initialized before operations"""
+        if not self._initialized:
+            self.init_db()
+            self._initialized = True
     
     def init_db(self) -> None:
         """Initialize database tables"""
@@ -86,9 +93,11 @@ class DatabaseManager:
                 )
             
             conn.commit()
+            self._initialized = True
     
     def save_message(self, role: str, content: str, session_id: str = "default") -> int:
         """Save a chat message"""
+        self._ensure_initialized()
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -100,6 +109,7 @@ class DatabaseManager:
     
     def save_tool_log(self, tool_name: str, usage: str, session_id: str = "default") -> int:
         """Save a tool usage log"""
+        self._ensure_initialized()
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -111,6 +121,7 @@ class DatabaseManager:
     
     def get_all_messages(self, session_id: str = None, limit: int = None) -> List[Dict[str, Any]]:
         """Get all messages, optionally filtered by session"""
+        self._ensure_initialized()
         with self.get_connection() as conn:
             cursor = conn.cursor()
             

@@ -1,6 +1,9 @@
 streamlit
-mcp-use
 langchain-groq
 python-dotenv
 apscheduler
 pandas
+fastmcp
+httpx
+requests
+urllib3

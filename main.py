@@ -78,7 +78,7 @@ except Exception as e:
     st.sidebar.warning(f"Error loading history: {e}")
 
 # Main content tabs
-tab1, tab2, tab3 = st.tabs(["💬 Chat Interface", "⚙️ Proactive Agents", "📊 Dashboard"])
+tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat Interface", "🖥️ Agent Management", "⚙️ Proactive Agents", "📊 Dashboard"])
 
 # Chat Tab
 with tab1:
@@ -105,8 +105,176 @@ with tab1:
     # Render chat interface with agent runner
     chat_interface.render_chat_tab(agent_runner_callback=sync_agent_runner)
 
-# Proactive Agents Tab
+# Agent Management Tab
 with tab2:
+    st.header("🖥️ Wazuh Agent Management")
+    
+    # Show current agents
+    st.subheader("📋 Current Agents")
+    try:
+        agents_result = st.session_state.agent.get_all_agents_info()
+        
+        if agents_result.get("success"):
+            agents = agents_result.get("agents", [])
+            
+            if agents:
+                # Create a summary
+                st.metric("Total Agents", len(agents))
+                
+                # Display agents in a table
+                agent_data = []
+                for agent in agents:
+                    agent_data.append({
+                        "ID": agent.get("id", "N/A"),
+                        "Name": agent.get("name", "N/A"),
+                        "IP": agent.get("ip", "N/A"),
+                        "Status": agent.get("status", "N/A"),
+                        "Version": agent.get("version", "N/A"),
+                        "Last Keep Alive": agent.get("lastKeepAlive", "N/A")
+                    })
+                
+                st.dataframe(agent_data, use_container_width=True)
+            else:
+                st.info("No agents found")
+        else:
+            st.error(f"Failed to load agents: {agents_result.get('error')}")
+    except Exception as e:
+        st.error(f"Error loading agents: {str(e)}")
+    
+    st.divider()
+    
+    # Add new agent section
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("➕ Add New Agent")
+        
+        with st.form("add_wazuh_agent_form"):
+            st.markdown("""
+            Register a new agent to monitor with Wazuh. After registration, you'll receive 
+            an agent key that needs to be installed on the target system.
+            """)
+            
+            new_agent_name = st.text_input(
+                "Agent Name (Hostname)*",
+                placeholder="e.g., srv-web-01, win-workstation-05",
+                help="The hostname of the system to monitor"
+            )
+            
+            new_agent_ip = st.text_input(
+                "IP Address",
+                value="any",
+                placeholder="e.g., 192.168.1.100 or 'any' for dynamic IP",
+                help="Use 'any' for DHCP systems or provide static IP"
+            )
+            
+            new_agent_groups = st.text_input(
+                "Groups (comma-separated)",
+                placeholder="e.g., webservers, production",
+                help="Optional: Assign agent to groups for easier management"
+            )
+            
+            col_btn1, col_btn2 = st.columns([1, 3])
+            with col_btn1:
+                submit_agent = st.form_submit_button("🚀 Register Agent", use_container_width=True)
+            
+            if submit_agent:
+                if not new_agent_name:
+                    st.error("❌ Agent name is required")
+                else:
+                    try:
+                        with st.spinner("Registering agent..."):
+                            # Parse groups
+                            groups = None
+                            if new_agent_groups:
+                                groups = [g.strip() for g in new_agent_groups.split(",")]
+                            
+                            # Register agent
+                            result = st.session_state.agent.add_new_agent(
+                                name=new_agent_name,
+                                ip=new_agent_ip,
+                                groups=groups
+                            )
+                            
+                            if result.get("success"):
+                                agent_info = result.get("agent", {})
+                                st.success(f"✅ {result.get('message')}")
+                                
+                                # Display agent details
+                                st.subheader("Agent Registration Details")
+                                
+                                col_info1, col_info2 = st.columns(2)
+                                with col_info1:
+                                    st.metric("Agent ID", agent_info.get("id", "N/A"))
+                                    st.metric("Agent Name", agent_info.get("name", "N/A"))
+                                with col_info2:
+                                    st.metric("IP Address", agent_info.get("ip", "N/A"))
+                                    st.metric("Status", agent_info.get("status", "pending"))
+                                
+                                # Show agent key
+                                agent_key = agent_info.get("key")
+                                if agent_key:
+                                    st.info("🔑 **Agent Authentication Key**")
+                                    st.code(agent_key, language="text")
+                                    
+                                    st.markdown("""
+                                    **Next Steps:**
+                                    1. Copy the agent key above
+                                    2. Install Wazuh agent on the target system
+                                    3. Import the key using: `wazuh-agent-auth -k <KEY>`
+                                    4. Start the agent service
+                                    
+                                    For detailed installation instructions, visit: 
+                                    https://documentation.wazuh.com/current/installation-guide/wazuh-agent/
+                                    """)
+                                
+                                # Rerun to refresh agent list
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {result.get('error')}")
+                    except Exception as e:
+                        st.error(f"❌ Error registering agent: {str(e)}")
+    
+    with col2:
+        st.subheader("🗑️ Remove Agent")
+        
+        with st.form("remove_agent_form"):
+            st.markdown("Remove an agent from Wazuh monitoring.")
+            
+            remove_agent_id = st.text_input(
+                "Agent ID",
+                placeholder="e.g., 001, 005",
+                help="The ID of the agent to remove"
+            )
+            
+            purge_agent = st.checkbox(
+                "Purge completely",
+                help="Remove all agent data from database"
+            )
+            
+            submit_remove = st.form_submit_button("🗑️ Remove Agent", use_container_width=True)
+            
+            if submit_remove:
+                if not remove_agent_id:
+                    st.error("❌ Agent ID is required")
+                else:
+                    try:
+                        with st.spinner("Removing agent..."):
+                            result = st.session_state.agent.remove_agent(
+                                agent_id=remove_agent_id,
+                                purge=purge_agent
+                            )
+                            
+                            if result.get("success"):
+                                st.success(f"✅ {result.get('message')}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {result.get('error')}")
+                    except Exception as e:
+                        st.error(f"❌ Error removing agent: {str(e)}")
+
+# Proactive Agents Tab
+with tab3:
     st.header("⚙️ Proactive Agent Management")
     
     col1, col2 = st.columns([2, 1])
@@ -185,7 +353,7 @@ with tab2:
     st.info("Proactive agent status monitoring will be displayed here")
 
 # Dashboard Tab  
-with tab3:
+with tab4:
     st.header("📊 SOC Automation Dashboard")
     
     try:

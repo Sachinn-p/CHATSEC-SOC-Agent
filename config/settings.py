@@ -45,12 +45,40 @@ class Config:
     DEFAULT_PROACTIVE_INTERVAL = int(os.getenv("DEFAULT_PROACTIVE_INTERVAL", "60"))
     
     @classmethod
+    def _resolve_command_path(cls) -> str:
+        """Resolve MCP command path to absolute path if it's relative"""
+        cmd = cls.MCP_COMMAND
+        if not cmd:
+            return cmd
+        
+        # Split command and arguments
+        parts = cmd.split()
+        if not parts:
+            return cmd
+        
+        # Check if first part looks like a relative path to a Python script
+        first_part = parts[0]
+        if first_part.endswith('.py') and not os.path.isabs(first_part):
+            # Resolve relative to project root
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            abs_path = os.path.join(project_root, first_part)
+            
+            if os.path.exists(abs_path):
+                # Reconstruct command with absolute path
+                parts[0] = abs_path
+                return ' '.join(parts)
+        
+        return cmd
+    
+    @classmethod
     def get_mcp_config(cls) -> Dict[str, Any]:
         """Get MCP server configuration"""
+        resolved_command = cls._resolve_command_path()
+        
         return {
             "mcpServers": {
                 "wazuh": {
-                    "command": cls.MCP_COMMAND,
+                    "command": resolved_command,
                     "args": [],
                     "env": {
                         "WAZUH_API_HOST": cls.WAZUH_API_HOST,
@@ -74,7 +102,6 @@ class Config:
         """Validate required configuration"""
         required_vars = [
             cls.GROQ_API_KEY,
-            cls.MCP_COMMAND,
             cls.WAZUH_API_PASSWORD,
             cls.WAZUH_INDEXER_PASSWORD
         ]
@@ -82,6 +109,10 @@ class Config:
         missing = [var for var in required_vars if not var]
         if missing:
             raise ValueError(f"Missing required configuration variables: {missing}")
+        
+        # MCP_COMMAND is optional
+        if not cls.MCP_COMMAND:
+            print("⚠️ MCP_COMMAND not set - Wazuh tools will not be available")
         
         return True
 
