@@ -1,0 +1,60 @@
+services:
+  # Main Streamlit application (without Wazuh containers)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatsec-app
+    ports:
+      - "8501:8501"
+    environment:
+      # Groq API configuration
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-mixtral-8x7b-32768}
+      
+      # MCP command configuration
+      MCP_COMMAND: ${MCP_COMMAND:-python scripts/wazuh_mcp.py}
+      
+      # Wazuh API configuration (point to your external Wazuh instance)
+      WAZUH_API_HOST: ${WAZUH_API_HOST:-your-wazuh-host}
+      WAZUH_API_PORT: ${WAZUH_API_PORT:-55000}
+      WAZUH_API_USERNAME: ${WAZUH_API_USERNAME:-admin}
+      WAZUH_API_PASSWORD: ${WAZUH_API_PASSWORD}
+      
+      # Wazuh Indexer configuration
+      WAZUH_INDEXER_HOST: ${WAZUH_INDEXER_HOST:-your-indexer-host}
+      WAZUH_INDEXER_PORT: ${WAZUH_INDEXER_PORT:-9200}
+      WAZUH_INDEXER_USERNAME: ${WAZUH_INDEXER_USERNAME:-admin}
+      WAZUH_INDEXER_PASSWORD: ${WAZUH_INDEXER_PASSWORD}
+      
+      # SSL and protocol settings
+      WAZUH_VERIFY_SSL: ${WAZUH_VERIFY_SSL:-false}
+      WAZUH_TEST_PROTOCOL: ${WAZUH_TEST_PROTOCOL:-http}
+      
+      # Database configuration
+      DATABASE_FILE: /app/data/chat_logs.db
+      
+      # Logging
+      RUST_LOG: ${RUST_LOG:-info}
+    
+    volumes:
+      # Persist database
+      - chatsec-data:/app/data
+      # Optional: Mount .env for easier configuration
+      - ./.env:/app/.env
+    
+    networks:
+      - chatsec-network
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    restart: unless-stopped
+
+volumes:
+  chatsec-data:
+    driver: local
+
+networks:
+  chatsec-network:
+    driver: bridge

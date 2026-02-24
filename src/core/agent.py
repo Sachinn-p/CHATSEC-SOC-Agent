@@ -1,14 +1,15 @@
 """
 Agent management module using FastMCP + Groq integration.
 """
-import os
-import sys
 import json
 import asyncio
-import subprocess
+import logging
+import requests
 from typing import List, Dict, Any, Optional
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+
+logger = logging.getLogger(__name__)
 
 from config.settings import Config
 from src.core.wazuh_client import get_wazuh_client
@@ -61,8 +62,6 @@ class SOCAgent:
             Dictionary with 'success', 'data', 'status_code', and 'error' fields
         """
         try:
-            import requests
-            
             # Prepare request parameters
             request_kwargs = {
                 'verify': verify_ssl,

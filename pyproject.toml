@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "SOC Team", email = "soc@company.com"}
+    {name = "Sachinn P", email = "sachinn2413@gmail.com"}
 ]
 keywords = ["security", "soc", "automation", "mcp", "wazuh", "ai", "chatbot"]
 classifiers = [

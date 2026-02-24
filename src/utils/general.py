@@ -1,30 +1,10 @@
 """
-Utility functions for SOC Agent Automation.
+General utility functions for SOC Agent Automation.
 """
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 import json
 import re
-
-
-def timestamp() -> str:
-    """Get current timestamp as string"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def iso_timestamp() -> str:
-    """Get current timestamp in ISO format"""
-    return datetime.now().isoformat()
-
-
-def format_datetime(dt_string: str, format_out: str = "%Y-%m-%d %H:%M:%S") -> str:
-    """Format datetime string to desired format"""
-    try:
-        dt = datetime.fromisoformat(dt_string.replace('Z', '+00:00'))
-        return dt.strftime(format_out)
-    except ValueError:
-        return dt_string
 
 
 def sanitize_filename(filename: str) -> str:
@@ -103,20 +83,6 @@ def mask_sensitive_data(text: str, patterns: Optional[List[str]] = None) -> str:
     return masked_text
 
 
-def format_file_size(size_bytes: int) -> str:
-    """Format file size in human readable format"""
-    if size_bytes == 0:
-        return "0 B"
-    
-    size_names = ["B", "KB", "MB", "GB", "TB"]
-    i = 0
-    while size_bytes >= 1024 and i < len(size_names) - 1:
-        size_bytes /= 1024.0
-        i += 1
-    
-    return f"{size_bytes:.2f} {size_names[i]}"
-
-
 def chunk_list(lst: List[Any], chunk_size: int) -> List[List[Any]]:
     """Split list into chunks of specified size"""
     return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
@@ -147,35 +113,6 @@ def deep_merge_dicts(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, 
     return result
 
 
-def retry_with_backoff(func, max_retries: int = 3, backoff_factor: float = 1.0, 
-                      exceptions: tuple = (Exception,)):
-    """Decorator for retrying function calls with exponential backoff"""
-    import time
-    import functools
-    
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-                    if attempt == max_retries:
-                        break
-                    
-                    wait_time = backoff_factor * (2 ** attempt)
-                    time.sleep(wait_time)
-            
-            raise last_exception
-        
-        return wrapper
-    
-    return decorator
-
-
 class HealthChecker:
     """Simple health checker for system components"""
     
@@ -188,6 +125,8 @@ class HealthChecker:
     
     def run_checks(self) -> Dict[str, Dict[str, Any]]:
         """Run all health checks"""
+        from .datetime_utils import iso_timestamp
+        
         results = {}
         
         for name, check_func in self.checks.items():
@@ -220,9 +159,3 @@ _health_checker = HealthChecker()
 def get_health_checker() -> HealthChecker:
     """Get global health checker instance"""
     return _health_checker
-
-
-# Legacy function
-def timestamp():
-    """Legacy timestamp function"""
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

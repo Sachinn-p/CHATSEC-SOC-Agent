@@ -51,6 +51,23 @@ if "agent" not in st.session_state:
 if "current_tool" not in st.session_state:
     st.session_state.current_tool = None
 
+
+async def _agent_runner(prompt: str, previous_messages: List[Dict[str, Any]]) -> str:
+    """Run agent asynchronously with error handling."""
+    try:
+        result = await run_agent(st.session_state.agent, prompt, previous_messages)
+        return result
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
+def sync_agent_runner(prompt: str, previous_messages: List[Dict[str, Any]]) -> str:
+    """Synchronous wrapper for the async agent runner."""
+    try:
+        return asyncio.run(_agent_runner(prompt, previous_messages))
+    except Exception as e:
+        return f"❌ Error running agent: {str(e)}"
+
 # Sidebar - System Status
 st.sidebar.header("🔧 System Status")
 if st.session_state.agent:
@@ -83,26 +100,8 @@ tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat Interface", "🖥️ Agent Manageme
 # Chat Tab
 with tab1:
     st.header("💬 Interactive Chat")
-    
-    # Get chat interface and set up agent runner
+
     chat_interface = get_chat_interface()
-    
-    async def agent_runner(prompt: str, previous_messages: List[Dict[str, Any]]) -> str:
-        """Run agent with proper error handling"""
-        try:
-            result = await run_agent(st.session_state.agent, prompt, previous_messages)
-            return result
-        except Exception as e:
-            return f"❌ Error: {str(e)}"
-    
-    def sync_agent_runner(prompt: str, previous_messages: List[Dict[str, Any]]) -> str:
-        """Synchronous wrapper for agent runner"""
-        try:
-            return asyncio.run(agent_runner(prompt, previous_messages))
-        except Exception as e:
-            return f"❌ Error running agent: {str(e)}"
-    
-    # Render chat interface with agent runner
     chat_interface.render_chat_tab(agent_runner_callback=sync_agent_runner)
 
 # Agent Management Tab
@@ -133,7 +132,7 @@ with tab2:
                         "Last Keep Alive": agent.get("lastKeepAlive", "N/A")
                     })
                 
-                st.dataframe(agent_data, use_container_width=True)
+                st.dataframe(agent_data, width='stretch')
             else:
                 st.info("No agents found")
         else:
@@ -176,7 +175,7 @@ with tab2:
             
             col_btn1, col_btn2 = st.columns([1, 3])
             with col_btn1:
-                submit_agent = st.form_submit_button("🚀 Register Agent", use_container_width=True)
+                submit_agent = st.form_submit_button("🚀 Register Agent", width='stretch')
             
             if submit_agent:
                 if not new_agent_name:
@@ -252,7 +251,7 @@ with tab2:
                 help="Remove all agent data from database"
             )
             
-            submit_remove = st.form_submit_button("🗑️ Remove Agent", use_container_width=True)
+            submit_remove = st.form_submit_button("🗑️ Remove Agent", width='stretch')
             
             if submit_remove:
                 if not remove_agent_id:

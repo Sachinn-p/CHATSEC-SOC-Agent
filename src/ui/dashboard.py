@@ -67,7 +67,7 @@ class DashboardRenderer:
                 WHERE content LIKE '🔔%' 
                   AND timestamp >= date('now', '-{} days')
                 ORDER BY timestamp DESC
-            """.format(days)
+            """.format(days, days)
             
             df = pd.read_sql(query, conn)
         
@@ -175,7 +175,7 @@ class DashboardRenderer:
             # Show top tools in a table
             if len(df_tools) > 5:
                 st.subheader("Top 10 Tools")
-                st.dataframe(df_tools.head(10), use_container_width=True)
+                st.dataframe(df_tools.head(10), width='stretch')
         else:
             st.info(f"No tool usage data available for the last {days} days.")
     
@@ -201,7 +201,7 @@ class DashboardRenderer:
             st.subheader("Execution Summary")
             summary = df_proactive.groupby('tool_name')['executions'].sum().reset_index()
             summary = summary.sort_values('executions', ascending=False)
-            st.dataframe(summary, use_container_width=True)
+            st.dataframe(summary, width='stretch')
         else:
             st.info(f"No proactive agent execution data for the last {days} days.")
     
@@ -226,7 +226,7 @@ class DashboardRenderer:
             # Reorder columns
             df_display = df_display[['timestamp', 'priority', 'content']]
             
-            st.dataframe(df_display, use_container_width=True)
+            st.dataframe(df_display, width='stretch')
             
             # Show summary stats
             alert_counts = df_alerts['type'].value_counts()
@@ -262,7 +262,7 @@ class DashboardRenderer:
             daily_totals['date'] = daily_totals['date'].dt.strftime('%Y-%m-%d')
             
             st.subheader("Daily Message Totals")
-            st.dataframe(daily_totals.tail(10), use_container_width=True)
+            st.dataframe(daily_totals.tail(10), width='stretch')
         else:
             st.info(f"No message data available for the last {days} days.")
     

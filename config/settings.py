@@ -2,11 +2,14 @@
 Configuration settings for the SOC Agent Automation application.
 """
 import os
+import logging
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class Config:
     """Main configuration class"""
@@ -112,8 +115,8 @@ class Config:
         
         # MCP_COMMAND is optional
         if not cls.MCP_COMMAND:
-            print("⚠️ MCP_COMMAND not set - Wazuh tools will not be available")
-        
+            logger.warning("MCP_COMMAND not set - Wazuh MCP tools will not be available")
+
         return True
 
 

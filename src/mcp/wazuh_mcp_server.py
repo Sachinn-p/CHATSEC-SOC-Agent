@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mock Wazuh MCP Server using FastMCP.
+Wazuh MCP Server using FastMCP.
 Provides MCP tools for Wazuh agent management and alert querying.
 """
 import os
@@ -12,125 +12,33 @@ from typing import Optional
 
 mcp = FastMCP("wazuh-server")
 
-# Wazuh Configuration
+# Import the proper WazuhAPIClient
+from src.core.wazuh_client import WazuhAPIClient
+
+# Wazuh Configuration (for reference, actual client uses Config)
 WAZUH_API_HOST = os.getenv("WAZUH_API_HOST", "127.0.0.1")
 WAZUH_API_PORT = os.getenv("WAZUH_API_PORT", "55000")
-WAZUH_API_USERNAME = os.getenv("WAZUH_API_USERNAME", "admin")
-WAZUH_API_PASSWORD = os.getenv("WAZUH_API_PASSWORD", "")
+WAZUH_API_USERNAME = os.getenv("WAZUH_API_USERNAME", "wazuh-wui")
+WAZUH_API_PASSWORD = os.getenv("WAZUH_API_PASSWORD", "MyS3cr37P450r.*-")
 WAZUH_INDEXER_HOST = os.getenv("WAZUH_INDEXER_HOST", "127.0.0.1")
 WAZUH_INDEXER_PORT = os.getenv("WAZUH_INDEXER_PORT", "9200")
 WAZUH_VERIFY_SSL = os.getenv("WAZUH_VERIFY_SSL", "false").lower() == "true"
-WAZUH_TEST_PROTOCOL = os.getenv("WAZUH_TEST_PROTOCOL", "http")
+WAZUH_TEST_PROTOCOL = os.getenv("WAZUH_TEST_PROTOCOL", "https")
 
 # Create Wazuh API URL
 WAZUH_URL = f"{WAZUH_TEST_PROTOCOL}://{WAZUH_API_HOST}:{WAZUH_API_PORT}"
 
 
-class WazuhClient:
-    """Client for Wazuh API"""
-    
-    def __init__(self):
-        self.base_url = WAZUH_URL
-        self.username = WAZUH_API_USERNAME
-        self.password = WAZUH_API_PASSWORD
-        self.token = None
-        self.verify_ssl = WAZUH_VERIFY_SSL
-        
-    def authenticate(self):
-        """Authenticate with Wazuh API"""
-        try:
-            auth = (self.username, self.password)
-            response = requests.get(
-                f"{self.base_url}/security/user/authenticate",
-                auth=auth,
-                verify=self.verify_ssl,
-                timeout=5
-            )
-            if response.status_code == 200:
-                self.token = response.json()["data"]["token"]
-                return True
-        except Exception as e:
-            print(f"Authentication failed: {e}")
-        return False
-    
-    def get_headers(self):
-        """Get request headers with authentication"""
-        if not self.token:
-            self.authenticate()
-        return {
-            "Authorization": f"Bearer {self.token}" if self.token else "",
-            "Content-Type": "application/json"
-        }
-    
-    def get_agents(self) -> list:
-        """Get list of Wazuh agents"""
-        try:
-            response = requests.get(
-                f"{self.base_url}/agents",
-                headers=self.get_headers(),
-                verify=self.verify_ssl,
-                timeout=5
-            )
-            if response.status_code == 200:
-                data = response.json().get("data", {})
-                return data.get("affected_items", [])
-        except Exception as e:
-            print(f"Error fetching agents: {e}")
-        return []
-    
-    def get_alerts(self, hours: int = 24) -> list:
-        """Get recent alerts from Wazuh"""
-        try:
-            # Since we're using Elasticsearch directly
-            indexer_url = f"http://{WAZUH_INDEXER_HOST}:{WAZUH_INDEXER_PORT}"
-            start_time = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
-            
-            query = {
-                "query": {
-                    "range": {
-                        "timestamp": {
-                            "gte": start_time
-                        }
-                    }
-                },
-                "size": 100,
-                "sort": [{"timestamp": {"order": "desc"}}]
-            }
-            
-            response = requests.post(
-                f"{indexer_url}/wazuh-alerts-*/_search",
-                json=query,
-                auth=(WAZUH_API_USERNAME, WAZUH_API_PASSWORD),
-                verify=False,
-                timeout=5
-            )
-            
-            if response.status_code == 200:
-                hits = response.json().get("hits", {}).get("hits", [])
-                return [hit["_source"] for hit in hits]
-        except Exception as e:
-            print(f"Error fetching alerts: {e}")
-        
-        return []
-    
-    def get_agent_stats(self, agent_id: str) -> dict:
-        """Get statistics for a specific agent"""
-        try:
-            response = requests.get(
-                f"{self.base_url}/agents/{agent_id}/stats/hourly",
-                headers=self.get_headers(),
-                verify=self.verify_ssl,
-                timeout=5
-            )
-            if response.status_code == 200:
-                return response.json().get("data", {})
-        except Exception as e:
-            print(f"Error fetching agent stats: {e}")
-        return {}
+# Use the proper WazuhAPIClient instead of custom implementation
+wazuh_client = WazuhAPIClient()
+wazuh_client.authenticate()
+
+# Keep a reference for direct API access
+_api_client = wazuh_client
 
 
 # Initialize Wazuh client
-wazuh_client = WazuhClient()
+# Using the proper WazuhAPIClient from src.core.wazuh_client
 
 
 @mcp.tool()
@@ -289,6 +197,53 @@ def get_critical_agents() -> str:
         "critical_agents": critical_agents,
         "total_critical": len(critical_agents),
         "critical_alerts_by_agent": agent_alert_count
+    }, indent=2)
+
+
+@mcp.tool()
+def get_agent_critical_alerts(agent_name: str, hours: int = 24) -> str:
+    """
+    Get critical alerts for a specific agent by name.
+    
+    Args:
+        agent_name: The name of the agent (e.g., 'win-001')
+        hours: Number of hours to search back
+    
+    Returns:
+        JSON string with critical alerts for the agent
+    """
+    agents = wazuh_client.get_agents()
+    agent_id = None
+    
+    # Find agent ID by name
+    for agent in agents:
+        if agent.get("name") == agent_name:
+            agent_id = agent.get("id")
+            break
+    
+    if not agent_id:
+        return json.dumps({
+            "success": False,
+            "error": f"Agent '{agent_name}' not found",
+            "agent_name": agent_name
+        }, indent=2)
+    
+    alerts = wazuh_client.get_alerts(hours=hours)
+    
+    # Filter alerts for this agent with critical severity (level >= 7)
+    critical_alerts = [
+        a for a in alerts 
+        if a.get("agent", {}).get("id") == agent_id 
+        and a.get("rule", {}).get("level", 0) >= 7
+    ]
+    
+    return json.dumps({
+        "success": True,
+        "agent_name": agent_name,
+        "agent_id": agent_id,
+        "total_critical_alerts": len(critical_alerts),
+        "hours_lookback": hours,
+        "critical_alerts": critical_alerts[:20]  # Limit to 20 most recent
     }, indent=2)
 
 

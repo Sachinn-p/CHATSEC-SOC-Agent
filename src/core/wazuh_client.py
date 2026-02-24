@@ -1,8 +1,8 @@
 """
 Direct Wazuh API client for querying agents, alerts, and security data.
 """
-import os
 import json
+import logging
 import requests
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -13,6 +13,8 @@ from config.settings import Config
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+logger = logging.getLogger(__name__)
+
 
 class WazuhAPIClient:
     """Client for direct Wazuh API access"""
@@ -22,64 +24,67 @@ class WazuhAPIClient:
         self.api_port = Config.WAZUH_API_PORT
         self.username = Config.WAZUH_API_USERNAME
         self.password = Config.WAZUH_API_PASSWORD
-        
-        # Wazuh API uses HTTPS by default
-        self.protocol = "https"
-        self.verify_ssl = False  # Disable SSL verification for self-signed certs
-        
+
+        self.protocol = Config.WAZUH_TEST_PROTOCOL or "https"
+        self.verify_ssl = Config.WAZUH_VERIFY_SSL.lower() == "true"
+
         self.indexer_host = Config.WAZUH_INDEXER_HOST
         self.indexer_port = Config.WAZUH_INDEXER_PORT
         self.indexer_username = Config.WAZUH_INDEXER_USERNAME
         self.indexer_password = Config.WAZUH_INDEXER_PASSWORD
-        
+
         self.base_url = f"{self.protocol}://{self.api_host}:{self.api_port}"
-        self.indexer_url = f"https://{self.indexer_host}:{self.indexer_port}"  # Also use HTTPS
+        self.indexer_url = f"{self.protocol}://{self.indexer_host}:{self.indexer_port}"
         self.token = None
         
     def authenticate(self) -> bool:
         """Authenticate with Wazuh API and get token"""
         try:
             url = f"{self.base_url}/security/user/authenticate"
-            print(f"[AUTH] Attempting to authenticate to: {url}")
-            print(f"       Username: {self.username}")
-            print(f"       Verify SSL: {self.verify_ssl}")
-            
+            logger.debug("Attempting to authenticate to: %s (user=%s)", url, self.username)
+
             response = requests.get(
                 url,
                 auth=HTTPBasicAuth(self.username, self.password),
                 verify=self.verify_ssl,
                 timeout=10
             )
-            
-            print(f"       Response status: {response.status_code}")
-            
+
+            logger.debug("Auth response status: %s", response.status_code)
+
             if response.status_code == 200:
                 self.token = response.json()["data"]["token"]
-                print(f"       [OK] Authentication successful")
+                logger.info("Wazuh authentication successful")
                 return True
             else:
-                print(f"       [FAIL] Authentication failed: {response.text}")
+                logger.warning("Wazuh authentication failed: %s", response.text)
+                self.token = None
                 return False
-                
+
         except requests.exceptions.ConnectionError as e:
-            print(f"       [ERROR] Connection error: Cannot reach {self.base_url}")
-            print(f"              Error details: {str(e)}")
+            logger.error("Cannot reach Wazuh API at %s: %s", self.base_url, e)
+            self.token = None
             return False
         except requests.exceptions.Timeout:
-            print(f"       [ERROR] Timeout: Wazuh API did not respond in 10 seconds")
+            logger.error("Wazuh API timed out after 10 seconds at %s", self.base_url)
+            self.token = None
             return False
         except Exception as e:
-            print(f"       [ERROR] Authentication error: {type(e).__name__}: {str(e)}")
-            import traceback
-            print(f"              Traceback: {traceback.format_exc()}")
+            logger.exception("Unexpected authentication error: %s", e)
+            self.token = None
             return False
     
     def _get_headers(self) -> Dict[str, str]:
-        """Get headers with authentication"""
+        """Get headers with authentication - will retry auth if token is missing"""
         if not self.token:
-            self.authenticate()
+            if not self.authenticate():
+                # Authentication failed, but return headers anyway so we can see the error
+                return {
+                    "Authorization": "",
+                    "Content-Type": "application/json"
+                }
         return {
-            "Authorization": f"Bearer {self.token}" if self.token else "",
+            "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json"
         }
     
@@ -148,7 +153,7 @@ class WazuhAPIClient:
                 f"{self.indexer_url}/wazuh-alerts-*/_search",
                 json=query,
                 auth=HTTPBasicAuth(self.indexer_username, self.indexer_password),
-                verify=False,
+                verify=self.verify_ssl,
                 timeout=10
             )
             
@@ -481,22 +486,17 @@ class WazuhAPIClient:
                 "success": True,
                 "message": f"Groups assigned to agent {agent_id}"
             }
-                
+
         except Exception as e:
+            logger.exception("Error assigning groups to agent %s: %s", agent_id, e)
             return {
                 "success": False,
                 "error": f"Error assigning groups: {str(e)}"
             }
-            return {
-                "success": False,
-                "error": f"Error updating groups: {str(e)}"
-            }
-    
+
     def health_check(self) -> Dict[str, Any]:
         """Check Wazuh connection health"""
         try:
-            # Test authentication
-            auth_result = self.authenticate()
             if not auth_result:
                 return {
                     "success": False,
@@ -531,17 +531,14 @@ class WazuhAPIClient:
                     "wazuh_api": self.base_url
                 }
         except Exception as e:
-            import traceback
+            logger.exception("Wazuh health check failed: %s", e)
             return {
                 "success": False,
                 "error": f"Connection error: {str(e)}",
-                "traceback": traceback.format_exc(),
                 "connected": False,
                 "wazuh_api": self.base_url,
                 "wazuh_indexer": self.indexer_url
             }
-        
-        return {"success": False, "error": "Unknown failure", "connected": False}
 
 
 # Global client instance
