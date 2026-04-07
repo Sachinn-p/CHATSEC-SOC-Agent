@@ -1,2 +1,13 @@
 .env
 .env.example
+
+# PyInstaller build artefacts
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Log file produced by the launcher
+chatsec_soc_agent.log
